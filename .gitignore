@@ -1,0 +1,15 @@
+# Godot
+.godot/
+*.translation
+export_credentials.cfg
+
+# Exported executable is shipped as dist/BlackSite-win64.zip (GitHub's 100 MB file limit)
+dist/BlackSite.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
