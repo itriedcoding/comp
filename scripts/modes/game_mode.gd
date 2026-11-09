@@ -154,6 +154,7 @@ func _build_world() -> void:
 	map_data = result["data"]
 	markers = map_data.get("markers", {})
 	add_child(builder)
+	builder.merge_static_geometry()
 	var environment := Maps.make_environment(map_data)
 	add_child(environment)
 	Maps.add_sun(self, map_data)

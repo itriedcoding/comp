@@ -10,7 +10,7 @@ signal request_menu
 const SETTINGS_PATH := "user://settings.cfg"
 const PROFILE_PATH := "user://profile.cfg"
 const CHECKPOINT_PATH := "user://checkpoint.json"
-const GAME_VERSION := "1.0.0"
+const GAME_VERSION := "1.1.0"
 
 const RESOLUTIONS := ["1280x720", "1600x900", "1920x1080", "2560x1440", "3440x1440", "3840x2160"]
 const WINDOW_MODES := ["Fullscreen", "Borderless", "Windowed"]

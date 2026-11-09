@@ -41,10 +41,15 @@ func _particle_count(base: int) -> int:
 func _decal_texture(surface: String) -> Texture2D:
 	if _decal_textures.has(surface):
 		return _decal_textures[surface]
-	var size := 64
+	var size := 96
 	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	var base := Color(0.03, 0.03, 0.03, 0.9)
+	var crack_rng := RandomNumberGenerator.new()
+	crack_rng.seed = surface.hash()
+	var cracks: Array[float] = []
+	for i in 9:
+		cracks.append(crack_rng.randf_range(0.0, TAU))
 	match surface:
 		"metal":
 			base = Color(0.06, 0.06, 0.065, 0.92)
@@ -67,6 +72,19 @@ func _decal_texture(surface: String) -> Texture2D:
 			if r < 0.22:
 				alpha = 1.0
 			var c := base
+			# Radial crack lines and a dusty rim read as a real impact instead
+			# of a soft blob.
+			var angle := atan2(dy, dx)
+			var crack := 0.0
+			for a in cracks:
+				var delta := absf(wrapf(angle - a, -PI, PI))
+				if delta < 0.09 and r > 0.28:
+					crack = maxf(crack, (0.09 - delta) / 0.09 * (r - 0.28))
+			if crack > 0.0:
+				alpha = maxf(alpha * 0.5, crack * 0.9)
+			if r > 0.42 and r < 0.56:
+				c = c.lerp(Color(0.32, 0.3, 0.27, 1.0), 0.35)
+				alpha = maxf(alpha, 0.22)
 			c.a = base.a * alpha
 			img.set_pixel(x, y, c)
 	var tex := ImageTexture.create_from_image(img)

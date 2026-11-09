@@ -86,7 +86,7 @@ static func _industrial() -> Dictionary:
 
 	# --- office (intel objective) ---
 	b.add_office(Vector3(-19, 0, -15), Vector3(10, 3.2, 8))
-	b.add_omni(Vector3(-19, 2.8, -15), Color(0.85, 0.92, 1.0), 1.6, 7.0, true)
+	b.add_omni(Vector3(-19, 2.8, -15), Color(0.85, 0.92, 1.0), 1.6, 7.0, false)
 	b.add_box(Vector3(-19.5, 0.02, -15.5), Vector3(9.0, 0.05, 7.0), "wood_plank", {"name": "OfficeFloor", "collide": false, "uv_scale": 0.6})
 
 	# --- interior clutter ---
@@ -132,7 +132,7 @@ static func _industrial() -> Dictionary:
 	b.add_barrel(Vector3(31.4, 0, 30.6), "rust")
 	b.add_box(Vector3(34, 1.4, 46), Vector3(4.0, 2.8, 4.0), "concrete_wall", {"name": "GuardShack"})
 	b.add_box(Vector3(34, 2.85, 46), Vector3(4.4, 0.2, 4.4), "roof", {"name": "GuardRoof", "collide": false})
-	b.add_omni(Vector3(34, 2.4, 46), Color(1.0, 0.85, 0.6), 1.4, 8.0, true)
+	b.add_omni(Vector3(34, 2.4, 46), Color(1.0, 0.85, 0.6), 1.4, 8.0, false)
 	b.add_dumpster(Vector3(-16, 0, 48), 0.0)
 	for i in 4:
 		b.add_puddle(Vector3(-6 + i * 4.5, 0.05, 24 + i * 5.0), Vector2(3.4, 2.6))
@@ -278,7 +278,7 @@ static func _urban() -> Dictionary:
 	b.add_visual_box(Vector3(0, 5.2, -38.7), Vector3(12.0, 0.6, 0.4), "screen")
 	for i in 5:
 		b.add_visual_box(Vector3(-12.0 + i * 6.0, 10.0, -38.8), Vector3(3.0, 2.4, 0.2), "glass")
-	b.add_omni(Vector3(0, 4.6, -36.0), Color(1.0, 0.9, 0.72), 2.4, 18.0, true)
+	b.add_omni(Vector3(0, 4.6, -36.0), Color(1.0, 0.9, 0.72), 2.4, 18.0, false)
 
 	# --- plaza ---
 	for i in 3:
@@ -461,28 +461,33 @@ static func make_environment(map_data: Dictionary) -> WorldEnvironment:
 	we.name = "WorldEnvironment"
 	var env := Environment.new()
 	var tod := String(map_data.get("time_of_day", "dusk"))
-	var sky_mat := ProceduralSkyMaterial.new()
+	# Physically based atmosphere (Rayleigh/Mie scattering) instead of a
+	# hand-painted gradient: real aerial perspective and a sun disc.
+	var sky_mat := PhysicalSkyMaterial.new()
 	match tod:
 		"night":
-			sky_mat.sky_top_color = Color(0.015, 0.025, 0.05)
-			sky_mat.sky_horizon_color = Color(0.06, 0.08, 0.12)
-			sky_mat.ground_bottom_color = Color(0.01, 0.012, 0.016)
-			sky_mat.ground_horizon_color = Color(0.04, 0.05, 0.07)
-			sky_mat.sun_angle_max = 12.0
+			sky_mat.rayleigh_coefficient = 0.35
+			sky_mat.mie_coefficient = 0.002
+			sky_mat.turbidity = 3.0
+			sky_mat.energy_multiplier = 0.3
+			sky_mat.ground_color = Color(0.012, 0.015, 0.02)
 		"dawn":
-			sky_mat.sky_top_color = Color(0.12, 0.2, 0.34)
-			sky_mat.sky_horizon_color = Color(0.55, 0.46, 0.42)
-			sky_mat.ground_bottom_color = Color(0.05, 0.05, 0.045)
-			sky_mat.ground_horizon_color = Color(0.22, 0.2, 0.18)
+			sky_mat.rayleigh_coefficient = 2.6
+			sky_mat.mie_coefficient = 0.006
+			sky_mat.turbidity = 11.0
+			sky_mat.energy_multiplier = 1.15
+			sky_mat.ground_color = Color(0.09, 0.08, 0.07)
 		_:
-			sky_mat.sky_top_color = Color(0.16, 0.24, 0.4)
-			sky_mat.sky_horizon_color = Color(0.72, 0.48, 0.3)
-			sky_mat.ground_bottom_color = Color(0.06, 0.055, 0.05)
-			sky_mat.ground_horizon_color = Color(0.3, 0.24, 0.18)
-	sky_mat.sun_curve = 0.12
+			sky_mat.rayleigh_coefficient = 3.2
+			sky_mat.mie_coefficient = 0.005
+			sky_mat.turbidity = 8.0
+			sky_mat.energy_multiplier = 1.0
+			sky_mat.ground_color = Color(0.11, 0.09, 0.07)
+	sky_mat.mie_eccentricity = 0.82
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
-	sky.radiance_size = Sky.RADIANCE_SIZE_128
+	sky.radiance_size = Sky.RADIANCE_SIZE_256
+	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
@@ -493,20 +498,28 @@ static func make_environment(map_data: Dictionary) -> WorldEnvironment:
 	env.tonemap_exposure = 1.0
 	env.tonemap_white = 6.0
 	env.glow_enabled = true
-	env.glow_intensity = 0.35
-	env.glow_bloom = 0.05
-	env.glow_hdr_threshold = 1.1
+	env.glow_intensity = 0.55
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 1.0
+	env.glow_strength = 1.05
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.ssao_enabled = bool(Game.settings["ssao"])
-	env.ssao_radius = 1.2
-	env.ssao_intensity = 1.6
-	env.ssao_power = 1.6
-	env.ssao_detail = 0.6
+	env.ssao_radius = 1.5
+	env.ssao_intensity = 1.8
+	env.ssao_power = 1.8
+	env.ssao_detail = 0.65
+	env.ssao_light_affect = 0.35
+	env.ssao_ao_channel_affect = 0.25
 	env.ssr_enabled = bool(Game.settings["ssr"])
 	env.ssr_max_steps = 48
 	env.ssr_fade_in = 0.15
 	env.ssr_fade_out = 2.0
 	env.ssr_depth_tolerance = 0.35
+	env.ssil_enabled = bool(Game.settings["ssao"]) and String(Game.settings["shadow_quality"]) != "Low"
+	env.ssil_radius = 2.4
+	env.ssil_intensity = 0.85
+	env.ssil_sharpness = 0.98
+	env.ssil_normal_rejection = 1.0
 	env.fog_enabled = true
 	env.fog_sky_affect = 0.35
 	match tod:
@@ -532,8 +545,8 @@ static func make_environment(map_data: Dictionary) -> WorldEnvironment:
 	env.volumetric_fog_gi_inject = 0.4
 	env.adjustment_enabled = true
 	env.adjustment_brightness = float(Game.settings["brightness"])
-	env.adjustment_contrast = 1.06
-	env.adjustment_saturation = 0.94
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.04
 	we.environment = env
 	return we
 
@@ -545,18 +558,21 @@ static func add_sun(parent: Node3D, map_data: Dictionary) -> DirectionalLight3D:
 	match tod:
 		"night":
 			sun.light_color = Color(0.42, 0.52, 0.78)
-			sun.light_energy = 0.18
+			sun.light_energy = 0.16
 			sun.rotation_degrees = Vector3(-28, 140, 0)
 		"dawn":
 			sun.light_color = Color(0.95, 0.8, 0.66)
-			sun.light_energy = 1.5
+			sun.light_energy = 1.25
 			sun.rotation_degrees = Vector3(-10, 75, 0)
 		_:
 			sun.light_color = Color(1.0, 0.72, 0.5)
-			sun.light_energy = 1.9
+			sun.light_energy = 1.6
 			sun.rotation_degrees = Vector3(-12, 205, 0)
 	sun.shadow_enabled = true
-	sun.light_angular_distance = 0.6
+	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY
+	sun.light_angular_distance = 0.75
+	sun.shadow_bias = 0.03
+	sun.shadow_normal_bias = 1.2
 	match String(Game.settings["shadow_quality"]):
 		"Low":
 			sun.directional_shadow_max_distance = 60.0

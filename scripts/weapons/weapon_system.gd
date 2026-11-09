@@ -458,6 +458,14 @@ func _build_viewmodel() -> void:
 	# Muzzle node placement.
 	if muzzle != null:
 		muzzle.position = Vector3(0, height * 0.05, -length * 0.55 - barrel - 0.03)
+	# Stock butt plate, ejection port, charging handle and sling loop.
+	_add_part(Vector3(0, -height * 0.1, length * 0.54), Vector3(width * 0.85, height * 0.95, 0.02), dark)
+	_add_part(Vector3(width * 0.53, height * 0.12, length * 0.02), Vector3(0.012, 0.035, 0.09), metal)
+	_add_part(Vector3(width * 0.3, height * 0.45, length * 0.18), Vector3(0.02, 0.02, 0.07), metal)
+	_add_part(Vector3(width * 0.3, -height * 0.15, length * 0.3), Vector3(0.01, 0.02, 0.04), metal)
+	# Gloved hands: right on the grip, left supporting the handguard.
+	_add_gloved_hand(Vector3(0.0, -height * 0.95, length * 0.14), true)
+	_add_gloved_hand(Vector3(-0.005, -height * 0.55, -length * 0.34), false)
 	viewmodel.position = Vector3(0.2, -0.16, -0.34)
 	viewmodel.rotation = Vector3.ZERO
 
@@ -495,6 +503,17 @@ func _add_cylinder_part(pos: Vector3, radius: float, length: float, material: Va
 	return mi
 
 
+func _add_gloved_hand(pos: Vector3, on_grip: bool) -> void:
+	var glove := Materials.get_material("glove")
+	var hand := _add_part(pos, Vector3(0.055, 0.085, 0.075), glove)
+	hand.name = "Hand"
+	for i in 3:
+		_add_part(pos + Vector3(0, 0.02, -0.05 - float(i) * 0.022), Vector3(0.05, 0.026, 0.02), glove)
+	_add_part(pos + Vector3(-0.038, 0.03, 0.01), Vector3(0.025, 0.06, 0.03), glove)
+	if on_grip:
+		_add_part(pos + Vector3(0, -0.065, 0.02), Vector3(0.06, 0.07, 0.05), glove)
+
+
 func _update_viewmodel(delta: float) -> void:
 	if viewmodel == null or not is_instance_valid(viewmodel) or player == null:
 		return
@@ -503,7 +522,13 @@ func _update_viewmodel(delta: float) -> void:
 	_sway_target = _sway_target.lerp(Vector2.ZERO, clampf(delta * 4.0, 0.0, 1.0))
 	var sway_scale := float(Game.settings["weapon_sway"])
 	var hip := Vector3(0.2, -0.16, -0.34)
-	var aim := Vector3(0.0, -0.055, -0.22)
+	var vm_data: Dictionary = current_stats().get("viewmodel", {})
+	var vm_height := float(vm_data.get("height", 0.1))
+	var optic_id := String(current_slot().get("attachments", {}).get("optic", "none"))
+	var sight_y := vm_height * 0.7
+	if optic_id != "none":
+		sight_y = vm_height * 0.62 + (0.05 if optic_id == "scope_4x" or optic_id == "acog" else 0.042)
+	var aim := Vector3(0.0, -sight_y, -0.24)
 	var target_pos := hip.lerp(aim, ads_progress)
 	var bob_amt := 0.012 * float(Game.settings["headbob"]) * (1.0 - ads_progress * 0.85)
 	target_pos.x += sin(_bob_time) * bob_amt + _sway.x * 1.4 * sway_scale

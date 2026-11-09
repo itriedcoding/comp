@@ -22,7 +22,16 @@ func _init() -> void:
 
 # ------------------------------------------------------------------ meshes ---
 
+static var _box_cache: Dictionary = {}
+static var _cone_cache: Dictionary = {}
+
+
+## Boxes are reused constantly (walls, crates, containers), so identical
+## dimensions share one ArrayMesh instead of rebuilding it every call.
 static func box_mesh(size: Vector3, tiles_per_meter: float = 1.0) -> ArrayMesh:
+	var key := "%0.2f|%0.2f|%0.2f|%0.2f" % [size.x, size.y, size.z, tiles_per_meter]
+	if _box_cache.has(key):
+		return _box_cache[key]
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
 	var hz := size.z * 0.5
@@ -36,7 +45,9 @@ static func box_mesh(size: Vector3, tiles_per_meter: float = 1.0) -> ArrayMesh:
 	_add_face(st, Vector3(-hx, hy, hz), Vector3(hx, hy, hz), Vector3(hx, hy, -hz), Vector3(-hx, hy, -hz), Vector3(0, 1, 0), Vector2(size.x, size.z) * tiles_per_meter)
 	_add_face(st, Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz), Vector3(hx, -hy, hz), Vector3(-hx, -hy, hz), Vector3(0, -1, 0), Vector2(size.x, size.z) * tiles_per_meter)
 	st.generate_tangents()
-	return st.commit()
+	var built: ArrayMesh = st.commit()
+	_box_cache[key] = built
+	return built
 
 
 static func _add_face(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3, uv_size: Vector2) -> void:
@@ -99,17 +110,26 @@ func add_visual_box(pos: Vector3, size: Vector3, material_id: String, rotation: 
 	return mi
 
 
+static func _cylinder_mesh(radius: float, height: float, segments: int) -> CylinderMesh:
+	var key := "%0.3f|%0.3f|%d" % [radius, height, segments]
+	if _cone_cache.has(key):
+		return _cone_cache[key]
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = height
+	mesh.radial_segments = segments
+	mesh.rings = 2
+	_cone_cache[key] = mesh
+	return mesh
+
+
 func add_cylinder(pos: Vector3, radius: float, height: float, material_id: String, opts: Dictionary = {}) -> Node3D:
 	var holder := Node3D.new()
 	holder.position = pos
 	holder.name = String(opts.get("name", "Cylinder"))
 	add_child(holder)
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = radius
-	mesh.bottom_radius = radius
-	mesh.height = height
-	mesh.radial_segments = int(opts.get("segments", 16))
-	mesh.rings = 2
+	var mesh := _cylinder_mesh(radius, height, int(opts.get("segments", 16)))
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = Materials.get_material(material_id)
@@ -147,14 +167,14 @@ func add_omni(pos: Vector3, color: Color, energy: float, range_m: float, shadow:
 	return light
 
 
-func add_spot(pos: Vector3, color: Color, energy: float, range_m: float, angle: float, direction: Vector3) -> SpotLight3D:
+func add_spot(pos: Vector3, color: Color, energy: float, range_m: float, angle: float, direction: Vector3, shadow: bool = false) -> SpotLight3D:
 	var light := SpotLight3D.new()
 	light.position = pos
 	light.light_color = color
 	light.light_energy = energy
 	light.spot_range = range_m
 	light.spot_angle = angle
-	light.shadow_enabled = true
+	light.shadow_enabled = shadow
 	light.look_at_from_position(pos, pos + direction, Vector3.UP)
 	add_child(light)
 	lights.append(light)
@@ -478,7 +498,7 @@ func add_floodlight(pos: Vector3, rotation_y: float = 0.0) -> void:
 	var pole := add_cylinder(pos + Vector3(0, 4.0, 0), 0.09, 8.0, "metal_panel", {"collide": true, "segments": 8, "name": "LightPole"})
 	var head := add_visual_box(pos + Vector3(0, 8.0, 0), Vector3(0.9, 0.35, 0.45), "lamp")
 	head.rotation_degrees.y = rotation_y
-	add_omni(pos + Vector3(0, 7.7, 0), Color(1.0, 0.9, 0.72), 3.2, 22.0, true)
+	add_omni(pos + Vector3(0, 7.7, 0), Color(1.0, 0.9, 0.72), 3.2, 22.0, false)
 	var housing := add_visual_box(pos + Vector3(0, 8.25, 0), Vector3(1.0, 0.15, 0.55), "metal_panel")
 	housing.rotation_degrees.y = rotation_y
 	pole.name = "Floodlight"
@@ -490,7 +510,7 @@ func add_streetlight(pos: Vector3, rotation_y: float = 0.0) -> void:
 	arm.rotation_degrees.y = rotation_y
 	var lamp := add_visual_box(pos + Vector3(cos(deg_to_rad(rotation_y)) * 2.1, 6.95, sin(deg_to_rad(rotation_y)) * 2.1), Vector3(0.7, 0.16, 0.35), "lamp")
 	lamp.rotation_degrees.y = rotation_y
-	add_omni(pos + Vector3(cos(deg_to_rad(rotation_y)) * 2.1, 6.7, sin(deg_to_rad(rotation_y)) * 2.1), Color(1.0, 0.86, 0.62), 4.0, 16.0, true)
+	add_omni(pos + Vector3(cos(deg_to_rad(rotation_y)) * 2.1, 6.7, sin(deg_to_rad(rotation_y)) * 2.1), Color(1.0, 0.86, 0.62), 4.0, 16.0, false)
 
 
 func add_truck(pos: Vector3, rotation_y: float = 0.0, color: String = "crate_green") -> void:
@@ -819,7 +839,7 @@ func add_watchtower(pos: Vector3, height: float = 6.0) -> void:
 	add_railing(pos + Vector3(-1.75, height + 0.15, 0), 3.6, 90.0, 1.05)
 	add_box(pos + Vector3(0, height + 2.3, 0), Vector3(4.0, 0.12, 4.0), "rust", {"name": "TowerRoof", "collide": false})
 	add_stairs(pos + Vector3(2.6, 0, 0), 1.2, height, 4.2, 12, "wood", 90.0)
-	add_omni(pos + Vector3(0, height + 1.6, 0), Color(1.0, 0.82, 0.55), 1.6, 9.0, true)
+	add_omni(pos + Vector3(0, height + 1.6, 0), Color(1.0, 0.82, 0.55), 1.6, 9.0, false)
 
 
 func add_antenna(pos: Vector3, height: float = 12.0) -> void:
@@ -866,7 +886,7 @@ func add_bunker(pos: Vector3, rot: float = 0.0, name: String = "Bunker") -> Node
 		body.add_child(shape)
 		body.position = entry[0]
 		holder.add_child(body)
-	add_omni(pos + Vector3(0, 2.7, 0), Color(0.75, 0.85, 1.0), 1.4, 7.0, true)
+	add_omni(pos + Vector3(0, 2.7, 0), Color(0.75, 0.85, 1.0), 1.4, 7.0, false)
 	_register_obstacle(holder, Vector3(8.2, 3.5, 6.4), "concrete", {})
 	return holder
 
@@ -1166,3 +1186,62 @@ func register_patrol_route(points: Array) -> Array:
 			p = grid_to_world(cell)
 		route.append(p)
 	return route
+
+
+## Collapses static map visuals into one mesh per material. Colliders, cover
+## points and navigation data are untouched, so gameplay is unchanged while
+## draw calls drop from several hundred to a couple of dozen.
+func merge_static_geometry() -> Dictionary:
+	if not is_inside_tree():
+		return {"groups": 0, "removed": 0, "vertices": 0}
+	var buckets: Dictionary = {}
+	var victims: Array[MeshInstance3D] = []
+	var pending: Array[Node] = [self]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			if child is Node3D:
+				pending.append(child)
+			if child is MeshInstance3D:
+				var mi := child as MeshInstance3D
+				if mi.mesh == null or mi.material_override == null or mi.has_meta("no_merge"):
+					continue
+				var mat := mi.material_override
+				if not buckets.has(mat):
+					var tool := SurfaceTool.new()
+					tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+					buckets[mat] = tool
+				var tool_ref: SurfaceTool = buckets[mat]
+				for surface in mi.mesh.get_surface_count():
+					tool_ref.append_from(mi.mesh, surface, mi.global_transform)
+				victims.append(mi)
+	var holder := Node3D.new()
+	holder.name = "MergedGeometry"
+	add_child(holder)
+	var vertices := 0
+	for mat in buckets.keys():
+		var st: SurfaceTool = buckets[mat]
+		st.generate_tangents()
+		var merged: ArrayMesh = st.commit()
+		if merged == null:
+			continue
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.name = "Merged"
+		mesh_instance.mesh = merged
+		mesh_instance.material_override = mat
+		mesh_instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		var transparent := false
+		if mat is StandardMaterial3D:
+			transparent = (mat as StandardMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if transparent else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		holder.add_child(mesh_instance)
+		for surface in merged.get_surface_count():
+			vertices += merged.surface_get_array_len(surface)
+	for mi in victims:
+		if not is_instance_valid(mi):
+			continue
+		var parent := mi.get_parent()
+		if parent != null:
+			parent.remove_child(mi)
+		mi.queue_free()
+	return {"groups": buckets.size(), "removed": victims.size(), "vertices": vertices}

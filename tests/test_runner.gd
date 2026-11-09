@@ -32,12 +32,15 @@ func _run_all() -> void:
 	_test_settings()
 	_test_audio_and_materials()
 	await _test_maps()
+	await _test_performance()
 	await _test_player_and_weapons()
 	await _test_ai()
 	await _test_checkpoint()
 	await _test_modes()
 	print("=== RESULT: %d checks, %d failures ===" % [checks, failures])
-	await get_tree().process_frame
+	# Let queued frees and deferred callbacks drain so shutdown is clean.
+	for i in 8:
+		await get_tree().process_frame
 	get_tree().quit(0 if failures == 0 else 1)
 
 
@@ -128,6 +131,43 @@ func _test_maps() -> void:
 		builder.queue_free()
 		env.queue_free()
 		await _frames(2)
+
+
+func _count_mesh_instances(node: Node) -> int:
+	var count := 0
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			count += 1
+		count += _count_mesh_instances(child)
+	return count
+
+
+func _test_performance() -> void:
+	var total_before := 0
+	var total_after := 0
+	for map_id in ["industrial", "urban", "outpost"]:
+		var started := Time.get_ticks_msec()
+		var result: Dictionary = Maps.build(map_id)
+		var builder: WorldBuilder = result["builder"]
+		add_child(builder)
+		await _frames(2)
+		var before := _count_mesh_instances(builder)
+		var stats: Dictionary = builder.merge_static_geometry()
+		await _frames(2)
+		var after := _count_mesh_instances(builder)
+		var elapsed := Time.get_ticks_msec() - started
+		total_before += before
+		total_after += after
+		print("PERF  %-10s build+merge %4d ms   mesh nodes %4d -> %3d   material batches %2d   verts %d" % [map_id, elapsed, before, after, int(stats["groups"]), int(stats["vertices"])])
+		check(after < 40, "merged draw batches per map: %s (%d)" % [map_id, after])
+		check(after * 3 < before, "draw calls reduced by at least 3x: %s (%d -> %d)" % [map_id, before, after])
+		check(elapsed < 5000, "map build stays under 5 s: %s (%d ms)" % [map_id, elapsed])
+		builder.queue_free()
+		await _frames(2)
+	print("PERF  total mesh nodes %d -> %d" % [total_before, total_after])
+	var mem_mb := Performance.get_monitor(Performance.MEMORY_STATIC) / (1024.0 * 1024.0)
+	print("PERF  static memory %.0f MB" % mem_mb)
+	check(mem_mb < 1800.0, "memory inside the 6 GB budget (static %.0f MB)" % mem_mb)
 
 
 func _test_player_and_weapons() -> void:

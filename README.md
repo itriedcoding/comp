@@ -59,6 +59,8 @@ Sensitivity, ADS sensitivity, invert-Y, FOV, crosshair style/colour/gap/thicknes
 
 **Maps.** Three hand-laid maps — Kessler Industrial Complex, Sokol Heights (urban) and the forest Outpost — each built from procedural geometry with generated PBR materials, cover registration, patrol routes, objective markers, weather (rain/dust), time-of-day lighting, volumetric fog, and a baked A* navigation grid used by every AI agent.
 
+**Characters and world detail.** Hostiles are articulated operators built from ~35 parts: plate carrier with pouches and radio, helmet with NVG mount and goggles, articulated arms with gloved hands, legs with knee pads and boots, and a rifle with optic and magazine. They walk with a procedural gait that scales with speed, counter-rotate their torso, crouch behind cover, turn their head and torso toward the player, hold their rifle in a firing pose and collapse on death. The player's viewmodel now has gloved hands on the grip and handguard, a stock butt plate, charging handle, ejection port and optic-height ADS alignment. World materials carry ramped albedo, tangent-space normals, roughness and ambient-occlusion maps; the sky is a physical Rayleigh/Mie atmosphere with a sun disc, and lighting adds SSIL bounce plus contact-hardened SSAO and screen-space reflections. Impact decals are 96 px with radial cracks and a dust rim.
+
 **Audio.** Every sound is synthesised at runtime into `AudioStreamWAV` buffers (no audio files): five weapon reports plus suppressed variants, magazine/bolt handling, footsteps per surface, impact sounds per material, hitmarkers, alarms, ambience beds (wind, industrial hum, rain), UI clicks. 3D playback with distance attenuation and raycast-based occlusion, buses for SFX/ambience/UI, and a reverb send.
 
 **UI.** Main menu with operations, briefings, difficulty, loadout and settings; in-game HUD with health/armor/stamina bars, dynamic crosshair that reacts to spread, hitmarkers, compass, objective list, timer, ammo/fire-mode readout, kill feed, damage vignette and objective prompts; pause menu (resume, settings, restart, quit to menu); mission results screen with stats; loading/intro overlay.
@@ -69,7 +71,7 @@ Sensitivity, ADS sensitivity, invert-Y, FOV, crosshair style/colour/gap/thicknes
 
 ## Honest scope and limitations
 
-* This is a **Godot 4** project, not Unreal Engine 5. It does not use Lumen, Nanite or photogrammetry assets, and the visuals are procedural/stylised-realistic rather than photoreal. UE5 could not be installed or run in the Linux build environment used to create this project.
+* This is a **Godot 4** project, not Unreal Engine 5. It does not use Lumen, Nanite or photogrammetry assets, and the visuals are procedural rather than photoreal. Geometry, PBR maps, characters, sky and audio are all generated in code. UE5 could not be installed or run in the Linux build environment used to create this project.
 * **DLSS is not implemented** and is not faked; Godot has no DLSS support. FSR 1 and FSR 2 are real and selectable. The settings screen says so in-game.
 * All art and audio are generated in code at startup. This keeps the download small and dependency-free, but it is not equivalent to authored AAA art.
 * Single-player offline only. There is no networking, matchmaking, or online service of any kind.
@@ -92,9 +94,28 @@ godot --headless --export-release "Windows Desktop" dist/BlackSite.exe
 godot --headless --path . res://tests/test_runner.tscn
 ```
 
-148 checks covering input bindings, weapon/mission/difficulty data, settings round-trips, synthesised audio streams, material generation, all three maps (navigation grid, cover, spawns, pathing, environment), player movement/damage/healing, weapon firing/reload/switching, AI perception/combat/death/squad bookkeeping, checkpoint save-load, and booting all five game modes.
+158 checks covering input bindings, weapon/mission/difficulty data, settings round-trips, synthesised audio streams, material generation, all three maps (navigation grid, cover, spawns, pathing, environment), player movement/damage/healing, weapon firing/reload/switching, AI perception/combat/death/squad bookkeeping, checkpoint save-load, booting all five game modes, and the rendering budgets below.
 
 The exported pack was additionally booted headlessly with `--main-pack` to confirm the build contains every resource it needs and starts the menu without script or resource errors.
+
+## Performance
+
+Measured on this build machine, headless (no GPU). The suite prints these numbers on every run:
+
+| Metric | Result |
+|---|---|
+| Map mesh nodes, all three maps combined | **2,055 → 56** (one merged batch per material) |
+| Draw batches per map | **17–20** |
+| Cold map build + merge (industrial) | **49 ms** (32 ms build, 17 ms merge) |
+| Warm rebuilds (industrial / urban / outpost) | 42 ms / 25 ms / 301 ms |
+| Process static memory during the full suite | **187 MB** |
+| Generated texture budget at "High" (1024 albedo, 512 normal/roughness/AO) | roughly 0.2 GB VRAM |
+
+Static world geometry is merged into one mesh per material at load, which removes roughly 2,000 individual mesh nodes and their draw calls per map. Only the directional sun casts dynamic shadows; lamp lights are unshadowed and grounded by SSAO/SSIL instead. `rendering` quality tiers control texture resolution, shadow atlas size, effects density and view distance, so the game can be pushed down if a machine is struggling; at the tested settings it stays far inside a 6 GB footprint.
+
+```bash
+godot --headless --path . res://tests/bench_cold.tscn   # cold map build + merge
+```
 
 ## Layout
 

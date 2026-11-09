@@ -67,6 +67,14 @@ var _difficulty: Dictionary = {}
 var _shotguns := false
 var _call_timer := 0.0
 var _moving_intent := false
+var _hips: Node3D
+var _torso: Node3D
+var _head_pivot: Node3D
+var _shin_left: Node3D
+var _shin_right: Node3D
+var _forearm_left: Node3D
+var _forearm_right: Node3D
+var _crouch_blend := 0.0
 
 
 func _ready() -> void:
@@ -127,53 +135,109 @@ func _build_visual() -> void:
 	_visual.name = "Visual"
 	add_child(_visual)
 	var uniform := Materials.get_material("fabric")
-	var armor_mat := Materials.get_material("metal_panel")
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = Color(0.42, 0.32, 0.26)
-	skin.roughness = 0.8
-	# Torso + plate carrier.
-	_add_mesh(_visual, Vector3(0, 1.12, 0), Vector3(0.48, 0.62, 0.28), uniform)
-	_add_mesh(_visual, Vector3(0, 1.14, -0.02), Vector3(0.5, 0.44, 0.32), armor_mat)
-	# Head + helmet.
-	_head_mesh = _add_mesh(_visual, Vector3(0, 1.62, 0), Vector3(0.24, 0.27, 0.24), skin, true)
+	var vest := Materials.get_material("vest")
+	var armor := Materials.get_material("metal_panel")
+	var glove := Materials.get_material("glove")
+	var skin := Materials.get_material("skin")
+	var boot := Materials.get_material("rubber")
+	var glass := Materials.get_material("glass")
+
+	# Pelvis and articulated torso.
+	_hips = Node3D.new()
+	_hips.name = "Hips"
+	_hips.position = Vector3(0, 0.92, 0)
+	_visual.add_child(_hips)
+	_add_mesh(_hips, Vector3(0, 0.02, 0), Vector3(0.34, 0.24, 0.26), uniform)
+
+	_torso = Node3D.new()
+	_torso.name = "Torso"
+	_torso.position = Vector3(0, 0.3, 0)
+	_hips.add_child(_torso)
+	_add_mesh(_torso, Vector3(0, 0.12, 0), Vector3(0.42, 0.5, 0.25), uniform)
+	_add_mesh(_torso, Vector3(0, 0.14, -0.015), Vector3(0.45, 0.4, 0.3), vest)
+	for i in 3:
+		_add_mesh(_torso, Vector3(-0.12 + float(i) * 0.12, -0.01, -0.18), Vector3(0.1, 0.13, 0.06), vest)
+	_add_mesh(_torso, Vector3(0.13, 0.3, 0.16), Vector3(0.06, 0.2, 0.06), armor)
+	_add_mesh(_torso, Vector3(0, 0.14, 0.19), Vector3(0.26, 0.32, 0.13), vest)
+	_add_mesh(_torso, Vector3(-0.25, 0.26, 0), Vector3(0.13, 0.12, 0.2), armor)
+	_add_mesh(_torso, Vector3(0.25, 0.26, 0), Vector3(0.13, 0.12, 0.2), armor)
+
+	# Neck, head, helmet, goggles and NVG mount.
+	_add_mesh(_torso, Vector3(0, 0.36, 0), Vector3(0.11, 0.09, 0.11), skin)
+	_head_pivot = Node3D.new()
+	_head_pivot.name = "HeadPivot"
+	_head_pivot.position = Vector3(0, 0.44, 0)
+	_torso.add_child(_head_pivot)
+	_head_mesh = _add_mesh(_head_pivot, Vector3.ZERO, Vector3(0.2, 0.24, 0.21), skin, true)
 	var helmet := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.17
-	sphere.height = 0.22
-	sphere.radial_segments = 12
-	sphere.rings = 6
+	sphere.radius = 0.155
+	sphere.height = 0.2
+	sphere.radial_segments = 16
+	sphere.rings = 8
 	helmet.mesh = sphere
-	helmet.material_override = armor_mat
-	helmet.position = Vector3(0, 1.71, 0)
-	helmet.scale = Vector3(1.0, 0.85, 1.05)
+	helmet.material_override = armor
+	helmet.position = Vector3(0, 0.04, 0.005)
+	helmet.scale = Vector3(1.06, 0.86, 1.12)
 	_head_mesh.add_child(helmet)
-	# Legs.
-	_leg_left = Node3D.new()
-	_leg_left.position = Vector3(-0.14, 0.8, 0)
-	_visual.add_child(_leg_left)
-	_add_mesh(_leg_left, Vector3(0, -0.4, 0), Vector3(0.17, 0.8, 0.2), uniform)
-	_leg_right = Node3D.new()
-	_leg_right.position = Vector3(0.14, 0.8, 0)
-	_visual.add_child(_leg_right)
-	_add_mesh(_leg_right, Vector3(0, -0.4, 0), Vector3(0.17, 0.8, 0.2), uniform)
-	# Arms.
+	_add_mesh(_head_pivot, Vector3(0, 0.015, -0.1), Vector3(0.17, 0.055, 0.035), glass)
+	_add_mesh(_head_pivot, Vector3(0, 0.12, -0.09), Vector3(0.05, 0.05, 0.05), armor)
+
+	# Arms with elbow joints.
 	_arm_left = Node3D.new()
-	_arm_left.position = Vector3(-0.3, 1.36, 0)
-	_visual.add_child(_arm_left)
-	_add_mesh(_arm_left, Vector3(0, -0.25, 0), Vector3(0.13, 0.52, 0.15), uniform)
+	_arm_left.position = Vector3(-0.26, 0.24, 0)
+	_torso.add_child(_arm_left)
+	_add_mesh(_arm_left, Vector3(0, -0.16, 0), Vector3(0.12, 0.32, 0.13), uniform)
+	_forearm_left = Node3D.new()
+	_forearm_left.position = Vector3(0, -0.31, 0)
+	_arm_left.add_child(_forearm_left)
+	_add_mesh(_forearm_left, Vector3(0, -0.14, -0.03), Vector3(0.1, 0.28, 0.11), uniform)
+	_add_mesh(_forearm_left, Vector3(0, -0.29, -0.07), Vector3(0.09, 0.1, 0.13), glove)
 	_arm_right = Node3D.new()
-	_arm_right.position = Vector3(0.3, 1.36, 0)
-	_visual.add_child(_arm_right)
-	_add_mesh(_arm_right, Vector3(0, -0.25, 0), Vector3(0.13, 0.52, 0.15), uniform)
-	# Rifle.
+	_arm_right.position = Vector3(0.26, 0.24, 0)
+	_torso.add_child(_arm_right)
+	_add_mesh(_arm_right, Vector3(0, -0.16, 0), Vector3(0.12, 0.32, 0.13), uniform)
+	_forearm_right = Node3D.new()
+	_forearm_right.position = Vector3(0, -0.31, 0)
+	_arm_right.add_child(_forearm_right)
+	_add_mesh(_forearm_right, Vector3(0, -0.14, -0.03), Vector3(0.1, 0.28, 0.11), uniform)
+	_add_mesh(_forearm_right, Vector3(0, -0.29, -0.07), Vector3(0.09, 0.1, 0.13), glove)
+
+	# Legs with knee pads and boots.
+	_leg_left = Node3D.new()
+	_leg_left.position = Vector3(-0.12, -0.06, 0)
+	_hips.add_child(_leg_left)
+	_add_mesh(_leg_left, Vector3(0, -0.2, 0), Vector3(0.15, 0.42, 0.17), uniform)
+	_add_mesh(_leg_left, Vector3(0, -0.36, -0.05), Vector3(0.14, 0.12, 0.1), armor)
+	_shin_left = Node3D.new()
+	_shin_left.position = Vector3(0, -0.41, 0)
+	_leg_left.add_child(_shin_left)
+	_add_mesh(_shin_left, Vector3(0, -0.2, 0), Vector3(0.13, 0.4, 0.15), uniform)
+	_add_mesh(_shin_left, Vector3(0, -0.41, -0.04), Vector3(0.13, 0.1, 0.26), boot)
+	_leg_right = Node3D.new()
+	_leg_right.position = Vector3(0.12, -0.06, 0)
+	_hips.add_child(_leg_right)
+	_add_mesh(_leg_right, Vector3(0, -0.2, 0), Vector3(0.15, 0.42, 0.17), uniform)
+	_add_mesh(_leg_right, Vector3(0, -0.36, -0.05), Vector3(0.14, 0.12, 0.1), armor)
+	_shin_right = Node3D.new()
+	_shin_right.position = Vector3(0, -0.41, 0)
+	_leg_right.add_child(_shin_right)
+	_add_mesh(_shin_right, Vector3(0, -0.2, 0), Vector3(0.13, 0.4, 0.15), uniform)
+	_add_mesh(_shin_right, Vector3(0, -0.41, -0.04), Vector3(0.13, 0.1, 0.26), boot)
+
+	# Rifle with optic, magazine and stock.
 	_gun = Node3D.new()
-	_gun.position = Vector3(0.22, 1.18, -0.32)
-	_visual.add_child(_gun)
-	_add_mesh(_gun, Vector3(0, 0, 0), Vector3(0.06, 0.09, 0.6), armor_mat)
-	_add_mesh(_gun, Vector3(0, 0.02, -0.45), Vector3(0.03, 0.03, 0.3), armor_mat)
-	_add_mesh(_gun, Vector3(0, -0.1, 0.02), Vector3(0.05, 0.16, 0.1), armor_mat)
+	_gun.position = Vector3(0.12, 0.1, -0.33)
+	_torso.add_child(_gun)
+	_add_mesh(_gun, Vector3(0, 0, 0), Vector3(0.055, 0.09, 0.48), armor)
+	_add_mesh(_gun, Vector3(0, 0.01, -0.34), Vector3(0.026, 0.026, 0.34), armor)
+	_add_mesh(_gun, Vector3(0, -0.02, -0.28), Vector3(0.05, 0.06, 0.2), vest)
+	_add_mesh(_gun, Vector3(0, -0.01, 0.32), Vector3(0.05, 0.08, 0.2), vest)
+	_add_mesh(_gun, Vector3(0, -0.1, -0.04), Vector3(0.045, 0.15, 0.08), armor)
+	_add_mesh(_gun, Vector3(0, 0.08, -0.02), Vector3(0.04, 0.05, 0.12), armor)
+	_add_mesh(_gun, Vector3(0, 0.075, -0.09), Vector3(0.035, 0.035, 0.012), glass)
 	_muzzle = Node3D.new()
-	_muzzle.position = Vector3(0, 0.02, -0.62)
+	_muzzle.position = Vector3(0, 0.01, -0.55)
 	_gun.add_child(_muzzle)
 
 
@@ -618,20 +682,43 @@ func _update_visual(delta: float) -> void:
 	if _visual == null:
 		return
 	var speed := Vector2(velocity.x, velocity.z).length()
-	var cycle := _anim_time * (4.0 + speed * 1.4)
-	var swing := clampf(speed / 2.6, 0.0, 1.0) * 0.55
+	var move := clampf(speed / 3.0, 0.0, 1.0)
+	var cycle := _anim_time * (5.0 + speed * 1.7)
+	var swing := sin(cycle) * 0.8 * move
+	var blend := clampf(delta * 12.0, 0.0, 1.0)
 	if _leg_left != null:
-		_leg_left.rotation.x = sin(cycle) * swing
+		_leg_left.rotation.x = lerpf(_leg_left.rotation.x, swing, blend)
 	if _leg_right != null:
-		_leg_right.rotation.x = -sin(cycle) * swing
-	var aiming := state == State.COMBAT
+		_leg_right.rotation.x = lerpf(_leg_right.rotation.x, -swing, blend)
+	if _shin_left != null:
+		_shin_left.rotation.x = lerpf(_shin_left.rotation.x, maxf(0.0, -swing) * 1.15, blend)
+	if _shin_right != null:
+		_shin_right.rotation.x = lerpf(_shin_right.rotation.x, maxf(0.0, swing) * 1.15, blend)
+	var crouching := in_cover and not peeking
+	_crouch_blend = move_toward(_crouch_blend, 1.0 if crouching else 0.0, delta * 3.5)
+	if _hips != null:
+		_hips.position.y = 0.92 - 0.34 * _crouch_blend + absf(sin(cycle)) * 0.035 * move
+	if _torso != null:
+		_torso.rotation.x = lerpf(_torso.rotation.x, 0.5 * _crouch_blend, clampf(delta * 6.0, 0.0, 1.0))
+		_torso.rotation.y = lerpf(_torso.rotation.y, sin(cycle) * 0.07 * move, blend)
+	var aiming := state == State.COMBAT or state == State.SEARCH
 	if _arm_right != null:
-		_arm_right.rotation.x = lerpf(_arm_right.rotation.x, -1.25 if aiming else -sin(cycle) * swing * 0.6, clampf(delta * 8.0, 0.0, 1.0))
+		_arm_right.rotation.x = lerpf(_arm_right.rotation.x, -1.15 if aiming else -sin(cycle) * swing * 0.5, clampf(delta * 9.0, 0.0, 1.0))
+		_arm_right.rotation.z = lerpf(_arm_right.rotation.z, -0.2 if aiming else 0.0, clampf(delta * 9.0, 0.0, 1.0))
 	if _arm_left != null:
-		_arm_left.rotation.x = lerpf(_arm_left.rotation.x, -1.05 if aiming else sin(cycle) * swing * 0.6, clampf(delta * 8.0, 0.0, 1.0))
+		_arm_left.rotation.x = lerpf(_arm_left.rotation.x, -1.35 if aiming else sin(cycle) * swing * 0.5, clampf(delta * 9.0, 0.0, 1.0))
+		_arm_left.rotation.z = lerpf(_arm_left.rotation.z, 0.45 if aiming else 0.0, clampf(delta * 9.0, 0.0, 1.0))
+	if _forearm_right != null:
+		_forearm_right.rotation.x = lerpf(_forearm_right.rotation.x, -0.55 if aiming else -0.15, clampf(delta * 8.0, 0.0, 1.0))
+	if _forearm_left != null:
+		_forearm_left.rotation.x = lerpf(_forearm_left.rotation.x, -0.8 if aiming else -0.15, clampf(delta * 8.0, 0.0, 1.0))
 	if _gun != null:
-		_gun.visible = aiming or state == State.SEARCH
-		_gun.rotation.x = lerpf(_gun.rotation.x, 0.0 if aiming else 0.6, clampf(delta * 8.0, 0.0, 1.0))
+		_gun.rotation.x = lerpf(_gun.rotation.x, 0.0 if aiming else 0.5, clampf(delta * 8.0, 0.0, 1.0))
+	if _head_pivot != null and player != null and aiming:
+		var look := player.global_position + Vector3.UP * 1.1 - _head_pivot.global_position
+		var wanted := atan2(-look.x, -look.z)
+		var local_yaw := clampf(wrapf(wanted - rotation.y, -PI, PI), -0.85, 0.85)
+		_head_pivot.rotation.y = lerp_angle(_head_pivot.rotation.y, local_yaw, clampf(delta * 6.0, 0.0, 1.0))
 
 
 func take_hit(damage: float, direction: Vector3, point: Vector3, headshot: bool, source: Node3D) -> void:

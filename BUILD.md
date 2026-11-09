@@ -50,6 +50,14 @@ godot --headless --export-release "Windows Desktop" dist/BlackSite.exe
 
 The result is one self-contained executable. On Windows the same command works from `cmd`/PowerShell with `godot.exe` on `PATH`.
 
+## Benchmark
+
+```bash
+godot --headless --path . res://tests/bench_cold.tscn
+```
+
+Prints the cold map build and merge time, the number of merged material batches and static memory. The main test suite prints the same budgets for all three maps.
+
 ## Notes
 
 * The exported build writes settings and progress to `%APPDATA%\Godot\app_userdata\BLACKSITE\`.
